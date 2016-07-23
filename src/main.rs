@@ -18,6 +18,7 @@ impl Jitter {
         unsafe {
             let size = num_pages * PAGE_SIZE;
 
+            // TODO: OS might not give writable + executable memory. Best to ask for writable, then make executable afterwards.
             let mem: *mut u8 = mem::transmute(libc::mmap(
                 ptr::null_mut(),
                 size,
