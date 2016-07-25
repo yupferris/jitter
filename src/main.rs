@@ -1,6 +1,3 @@
-// TODO: Windows support with VirtualAlloc/VirtualFree
-//  https://msdn.microsoft.com/en-us/library/windows/desktop/aa366887(v=vs.85).aspx
-
 extern crate libc;
 extern crate winapi;
 extern crate kernel32;
