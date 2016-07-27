@@ -2,6 +2,34 @@ extern crate libc;
 extern crate winapi;
 extern crate kernel32;
 
+struct Assembler {
+    bytes: Vec<u8>
+}
+
+impl Assembler {
+    fn new() -> Assembler {
+        Assembler {
+            bytes: Vec::new()
+        }
+    }
+
+    fn mov_eax_abs_32(&mut self, value: u32) {
+        self.bytes.push(0xb8);
+        self.bytes.push(((value >>  0) & 0xff) as u8);
+        self.bytes.push(((value >>  8) & 0xff) as u8);
+        self.bytes.push(((value >> 16) & 0xff) as u8);
+        self.bytes.push(((value >> 24) & 0xff) as u8);
+    }
+
+    fn ret(&mut self) {
+        self.bytes.push(0xc3);
+    }
+
+    fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
 #[cfg(unix)]
 mod jitter {
     use libc;
@@ -14,10 +42,16 @@ mod jitter {
     }
 
     impl Jitter {
-        pub fn new(num_pages: usize) -> Jitter {
+        pub fn new(bytes: &[u8]) -> Jitter {
             unsafe {
                 const PAGE_SIZE: usize = 4096;
-                let size = num_pages * PAGE_SIZE;
+                let size = {
+                    let mut size = 0;
+                    while size < bytes.len() {
+                        size += PAGE_SIZE;
+                    }
+                    size
+                };
 
                 // TODO: OS might not give writable + executable memory. Best to ask for writable, then make executable afterwards.
                 let mem: *mut u8 = mem::transmute(libc::mmap(
@@ -28,12 +62,9 @@ mod jitter {
                     -1,
                     0));
 
-                *mem.offset(0x00) = 0xb8;
-                *mem.offset(0x01) = 0x2a;
-                *mem.offset(0x02) = 0x00;
-                *mem.offset(0x03) = 0x00;
-                *mem.offset(0x04) = 0x00;
-                *mem.offset(0x05) = 0xc3;
+                for (i, x) in bytes.iter().enumerate() {
+                    *mem.offset(i as isize) = *x;
+                }
 
                 Jitter {
                     size: size,
@@ -69,10 +100,16 @@ mod jitter {
     }
 
     impl Jitter {
-        pub fn new(num_pages: usize) -> Jitter {
+        pub fn new(bytes: &[u8]) -> Jitter {
             unsafe {
                 const PAGE_SIZE: usize = 4096;
-                let size = num_pages * PAGE_SIZE;
+                let size = {
+                    let mut size = 0;
+                    while size < bytes.len() {
+                        size += PAGE_SIZE;
+                    }
+                    size
+                };
 
                 // TODO: OS might not give writable + executable memory. Best to ask for writable, then make executable afterwards.
                 let mem: *mut u8 = mem::transmute(kernel32::VirtualAlloc(
@@ -81,12 +118,9 @@ mod jitter {
                     winapi::MEM_COMMIT,
                     winapi::PAGE_EXECUTE_READWRITE));
 
-                *mem.offset(0x00) = 0xb8;
-                *mem.offset(0x01) = 0x2a;
-                *mem.offset(0x02) = 0x00;
-                *mem.offset(0x03) = 0x00;
-                *mem.offset(0x04) = 0x00;
-                *mem.offset(0x05) = 0xc3;
+                for (i, x) in bytes.iter().enumerate() {
+                    *mem.offset(i as isize) = *x;
+                }
 
                 Jitter {
                     mem: mem
@@ -112,6 +146,11 @@ mod jitter {
 use jitter::*;
 
 fn main() {
-    let mut jitter = Jitter::new(1);
+    let mut assembler = Assembler::new();
+
+    assembler.mov_eax_abs_32(42);
+    assembler.ret();
+
+    let mut jitter = Jitter::new(assembler.bytes());
     println!("Result: {}", jitter.run());
 }
