@@ -32,6 +32,24 @@ impl Assembler {
         self.bytes.push(0xd0);
     }
 
+    fn push_ebp(&mut self) {
+        self.bytes.push(0x55);
+    }
+
+    fn pop_ebp(&mut self) {
+        self.bytes.push(0x5d);
+    }
+
+    fn mov_ebp_esp(&mut self) {
+        self.bytes.push(0x89);
+        self.bytes.push(0xe5);
+    }
+
+    fn mov_esp_ebp(&mut self) {
+        self.bytes.push(0x89);
+        self.bytes.push(0xec);
+    }
+
     fn ret(&mut self) {
         self.bytes.push(0xc3);
     }
@@ -157,11 +175,20 @@ mod jitter {
 use jitter::*;
 
 extern "stdcall" fn hi(x: i32, y: i32) -> i32 {
-    x + y
+    let ret = x + y;
+    println!("hi called, result is {}", ret);
+    ret
 }
 
 fn main() {
+    // Without using println! _before_ calling into our generated code (that calls back into a Rust fn that
+    //  also calls println!), we get a SIGSEGV somewhere down in stdout. I have no idea why yet.
+    println!("This is necessary to avoid a SIGSEGV");
+
     let mut asm = Assembler::new();
+
+    asm.push_ebp();
+    asm.mov_ebp_esp();
 
     asm.mov_eax_abs_32(5);
     asm.push_eax();
@@ -169,6 +196,10 @@ fn main() {
     asm.push_eax();
     asm.mov_eax_abs_32(unsafe { mem::transmute(hi) });
     asm.call_eax();
+
+    asm.mov_esp_ebp();
+    asm.pop_ebp();
+
     asm.ret();
 
     let mut jitter = Jitter::new(asm.bytes());
