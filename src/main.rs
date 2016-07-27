@@ -23,6 +23,10 @@ impl Assembler {
         self.bytes.push(((value >> 24) & 0xff) as u8);
     }
 
+    fn push_eax(&mut self) {
+        self.bytes.push(0x50);
+    }
+
     fn call_eax(&mut self) {
         self.bytes.push(0xff);
         self.bytes.push(0xd0);
@@ -152,13 +156,17 @@ mod jitter {
 
 use jitter::*;
 
-extern "stdcall" fn hi() -> i32 {
-    5000
+extern "stdcall" fn hi(x: i32, y: i32) -> i32 {
+    x + y
 }
 
 fn main() {
     let mut asm = Assembler::new();
 
+    asm.mov_eax_abs_32(5);
+    asm.push_eax();
+    asm.mov_eax_abs_32(6);
+    asm.push_eax();
     asm.mov_eax_abs_32(unsafe { mem::transmute(hi) });
     asm.call_eax();
     asm.ret();
