@@ -2,6 +2,8 @@ extern crate libc;
 extern crate winapi;
 extern crate kernel32;
 
+use std::mem;
+
 struct Assembler {
     bytes: Vec<u8>
 }
@@ -19,6 +21,11 @@ impl Assembler {
         self.bytes.push(((value >>  8) & 0xff) as u8);
         self.bytes.push(((value >> 16) & 0xff) as u8);
         self.bytes.push(((value >> 24) & 0xff) as u8);
+    }
+
+    fn call_eax(&mut self) {
+        self.bytes.push(0xff);
+        self.bytes.push(0xd0);
     }
 
     fn ret(&mut self) {
@@ -145,12 +152,17 @@ mod jitter {
 
 use jitter::*;
 
+extern "stdcall" fn hi() -> i32 {
+    5000
+}
+
 fn main() {
-    let mut assembler = Assembler::new();
+    let mut asm = Assembler::new();
 
-    assembler.mov_eax_abs_32(42);
-    assembler.ret();
+    asm.mov_eax_abs_32(unsafe { mem::transmute(hi) });
+    asm.call_eax();
+    asm.ret();
 
-    let mut jitter = Jitter::new(assembler.bytes());
+    let mut jitter = Jitter::new(asm.bytes());
     println!("Result: {}", jitter.run());
 }
