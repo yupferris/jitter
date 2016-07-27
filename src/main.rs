@@ -15,7 +15,7 @@ impl Assembler {
         }
     }
 
-    fn mov_eax_abs_32(&mut self, value: u32) {
+    fn mov_eax_imm_32(&mut self, value: u32) {
         self.bytes.push(0xb8);
         self.bytes.push(((value >>  0) & 0xff) as u8);
         self.bytes.push(((value >>  8) & 0xff) as u8);
@@ -48,6 +48,18 @@ impl Assembler {
     fn mov_esp_ebp(&mut self) {
         self.bytes.push(0x89);
         self.bytes.push(0xec);
+    }
+
+    fn add_esp_imm_u8(&mut self, value: u8) {
+        self.bytes.push(0x83);
+        self.bytes.push(0xc4);
+        self.bytes.push(value);
+    }
+
+    fn sub_esp_imm_u8(&mut self, value: u8) {
+        self.bytes.push(0x83);
+        self.bytes.push(0xec);
+        self.bytes.push(value);
     }
 
     fn ret(&mut self) {
@@ -174,34 +186,77 @@ mod jitter {
 
 use jitter::*;
 
+extern "stdcall" fn print_the_thing() {
+    println!("Well it printed the thing");
+}
+
+/*extern "stdcall" fn do_nothing() {
+}
+
+extern "stdcall" fn do_nothing_with_one_arg(x: i32) {
+}
+
+extern "stdcall" fn do_nothing_with_two_args(x: i32, y: i32) {
+}
+
+extern "stdcall" fn do_nothing_with_three_args(x: i32, y: i32, z: i32) {
+}
+
 extern "stdcall" fn hi(x: i32, y: i32) -> i32 {
     let ret = x + y;
     println!("hi called, result is {}", ret);
     ret
 }
 
+extern fn call_the_funcs() {
+    //do_nothing();
+    //do_nothing_with_one_arg(42);
+    //do_nothing_with_two_args(5, 6);
+    //do_nothing_with_three_args(1, 2, 3);
+
+    //print_the_thing();
+    //hi(5, 6);
+}*/
+
 fn main() {
-    // Without using println! _before_ calling into our generated code (that calls back into a Rust fn that
-    //  also calls println!), we get a SIGSEGV somewhere down in stdout. I have no idea why yet.
-    println!("This is necessary to avoid a SIGSEGV");
+    //call_the_funcs();
 
     let mut asm = Assembler::new();
 
     asm.push_ebp();
     asm.mov_ebp_esp();
+    // rustc (or llvm?) is always allocating 8 bytes for functions that call other functions with 0, 1, or 2 arg's,
+    //  but then jumps suddenly to allocating 24 bytes for 3 arg's. The lower portion if this space is used for
+    //  passing arg's where applicable; the rest is untouched. I need to find out 1. why this is, and 2. what
+    //  is the rule I need to follow when writing my JIT to always ensure I'm not breaking something :)
+    asm.sub_esp_imm_u8(8);
 
-    asm.mov_eax_abs_32(5);
+    asm.mov_eax_imm_32(unsafe { mem::transmute(print_the_thing as extern "stdcall" fn()) });
+    asm.call_eax();
+
+    asm.add_esp_imm_u8(8);
+    asm.pop_ebp();
+    asm.ret();
+
+    /*asm.push_ebp();
+    asm.mov_ebp_esp();
+
+    asm.mov_eax_imm_32(unsafe { mem::transmute(print_the_thing as extern "stdcall" fn()) });
+    asm.call_eax();
+
+    asm.mov_eax_imm_32(5);
     asm.push_eax();
-    asm.mov_eax_abs_32(6);
+    asm.mov_eax_imm_32(6);
     asm.push_eax();
-    asm.mov_eax_abs_32(unsafe { mem::transmute(hi) });
+    asm.mov_eax_imm_32(unsafe { mem::transmute(hi as extern "stdcall" fn(i32, i32) -> i32) });
     asm.call_eax();
 
     asm.mov_esp_ebp();
     asm.pop_ebp();
 
-    asm.ret();
+    asm.ret();*/
 
     let mut jitter = Jitter::new(asm.bytes());
-    println!("Result: {}", jitter.run());
+    let res = jitter.run();
+    //println!("Result: {}", res);
 }
