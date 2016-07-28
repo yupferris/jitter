@@ -190,16 +190,20 @@ extern "stdcall" fn print_the_thing() {
     println!("Well it printed the thing");
 }
 
-/*extern "stdcall" fn do_nothing() {
+extern "stdcall" fn do_nothing() {
+    println!("do nothing");
 }
 
-extern "stdcall" fn do_nothing_with_one_arg(x: i32) {
+extern "stdcall" fn do_nothing_with_one_arg(_x: i32) {
+    println!("do nothing with one arg");
 }
 
-extern "stdcall" fn do_nothing_with_two_args(x: i32, y: i32) {
+extern "stdcall" fn do_nothing_with_two_args(_x: i32, _y: i32) {
+    println!("do nothing with two args");
 }
 
-extern "stdcall" fn do_nothing_with_three_args(x: i32, y: i32, z: i32) {
+extern "stdcall" fn do_nothing_with_three_args(_x: i32, _y: i32, _z: i32) {
+    println!("do nothing with three args");
 }
 
 extern "stdcall" fn hi(x: i32, y: i32) -> i32 {
@@ -208,55 +212,59 @@ extern "stdcall" fn hi(x: i32, y: i32) -> i32 {
     ret
 }
 
-extern fn call_the_funcs() {
-    //do_nothing();
-    //do_nothing_with_one_arg(42);
-    //do_nothing_with_two_args(5, 6);
-    //do_nothing_with_three_args(1, 2, 3);
-
-    //print_the_thing();
-    //hi(5, 6);
-}*/
-
 fn main() {
-    //call_the_funcs();
-
     let mut asm = Assembler::new();
 
     asm.push_ebp();
     asm.mov_ebp_esp();
-    // rustc (or llvm?) is always allocating 8 bytes for functions that call other functions with 0, 1, or 2 arg's,
-    //  but then jumps suddenly to allocating 24 bytes for 3 arg's. The lower portion if this space is used for
-    //  passing arg's where applicable; the rest is untouched. I need to find out 1. why this is, and 2. what
-    //  is the rule I need to follow when writing my JIT to always ensure I'm not breaking something :)
+
     asm.sub_esp_imm_u8(8);
-
     asm.mov_eax_imm_32(unsafe { mem::transmute(print_the_thing as extern "stdcall" fn()) });
     asm.call_eax();
-
     asm.add_esp_imm_u8(8);
-    asm.pop_ebp();
-    asm.ret();
 
-    /*asm.push_ebp();
-    asm.mov_ebp_esp();
-
-    asm.mov_eax_imm_32(unsafe { mem::transmute(print_the_thing as extern "stdcall" fn()) });
+    asm.sub_esp_imm_u8(8);
+    asm.mov_eax_imm_32(unsafe { mem::transmute(do_nothing as extern "stdcall" fn()) });
     asm.call_eax();
+    asm.add_esp_imm_u8(8);
+
+    asm.sub_esp_imm_u8(4);
+    asm.mov_eax_imm_32(5);
+    asm.push_eax();
+    asm.mov_eax_imm_32(unsafe { mem::transmute(do_nothing_with_one_arg as extern "stdcall" fn(i32)) });
+    asm.call_eax();
+    asm.add_esp_imm_u8(4);
 
     asm.mov_eax_imm_32(5);
     asm.push_eax();
     asm.mov_eax_imm_32(6);
+    asm.push_eax();
+    asm.mov_eax_imm_32(unsafe { mem::transmute(do_nothing_with_two_args as extern "stdcall" fn(i32, i32)) });
+    asm.call_eax();
+
+    asm.sub_esp_imm_u8(12);
+    asm.mov_eax_imm_32(1);
+    asm.push_eax();
+    asm.mov_eax_imm_32(2);
+    asm.push_eax();
+    asm.mov_eax_imm_32(3);
+    asm.push_eax();
+    asm.mov_eax_imm_32(unsafe { mem::transmute(do_nothing_with_three_args as extern "stdcall" fn(i32, i32, i32)) });
+    asm.call_eax();
+    asm.add_esp_imm_u8(12);
+
+    asm.mov_eax_imm_32(32);
+    asm.push_eax();
+    asm.mov_eax_imm_32(16);
     asm.push_eax();
     asm.mov_eax_imm_32(unsafe { mem::transmute(hi as extern "stdcall" fn(i32, i32) -> i32) });
     asm.call_eax();
 
     asm.mov_esp_ebp();
     asm.pop_ebp();
-
-    asm.ret();*/
+    asm.ret();
 
     let mut jitter = Jitter::new(asm.bytes());
     let res = jitter.run();
-    //println!("Result: {}", res);
+    println!("Result: {}", res);
 }
